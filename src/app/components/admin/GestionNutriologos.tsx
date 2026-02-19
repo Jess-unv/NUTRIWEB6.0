@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -6,7 +6,7 @@ import { Label } from '@/app/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/app/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/app/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
-import { UserPlus, Edit, Trash2, KeyRound, AlertTriangle, BadgeDollarSign, Mail, Phone, UserCircle, RefreshCw } from 'lucide-react';
+import { UserPlus, Edit, Trash2, KeyRound, AlertTriangle, BadgeDollarSign, Mail, Phone, UserCircle, RefreshCw, Stethoscope } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/app/context/supabaseClient';
 
@@ -20,6 +20,103 @@ interface Nutriologo {
   tarifa_consulta: number;
   fecha_registro: string;
   activo: boolean;
+}
+
+// Componente de carga animado
+function AnimatedLoadingScreen() {
+  const iconRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+  const dotsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Animación del icono (nutriología)
+    const iconElement = iconRef.current;
+    const textElement = textRef.current;
+    const dotsElement = dotsRef.current;
+
+    if (iconElement) {
+      iconElement.animate(
+        [
+          { transform: 'rotate(0deg) scale(1)', opacity: 0.8 },
+          { transform: 'rotate(360deg) scale(1.2)', opacity: 1 },
+          { transform: 'rotate(720deg) scale(1)', opacity: 0.8 }
+        ],
+        {
+          duration: 3000,
+          iterations: Infinity,
+          easing: 'cubic-bezier(0.4, 0.0, 0.2, 1)'
+        }
+      );
+    }
+
+    if (textElement) {
+      textElement.animate(
+        [
+          { opacity: 0.5 },
+          { opacity: 1 },
+          { opacity: 0.5 }
+        ],
+        {
+          duration: 2000,
+          iterations: Infinity,
+          easing: 'ease-in-out'
+        }
+      );
+    }
+
+    if (dotsElement) {
+      const dots = dotsElement.children;
+      Array.from(dots).forEach((dot, index) => {
+        (dot as HTMLElement).animate(
+          [
+            { transform: 'scale(0.8)', opacity: 0.5 },
+            { transform: 'scale(1.2)', opacity: 1 },
+            { transform: 'scale(0.8)', opacity: 0.5 }
+          ],
+          {
+            duration: 1500,
+            delay: index * 200,
+            iterations: Infinity,
+            easing: 'ease-in-out'
+          }
+        );
+      });
+    }
+  }, []);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#F0FFF4]">
+      <div className="text-center">
+        <div className="flex justify-center mb-8">
+          <div 
+            ref={iconRef}
+            className="text-[#2E8B57]"
+          >
+            <Stethoscope size={80} strokeWidth={1.5} />
+          </div>
+        </div>
+        
+        <div 
+          ref={textRef}
+          className="text-[#2E8B57] font-bold text-2xl mb-6"
+        >
+          Cargando profesionales de la salud...
+        </div>
+        
+        <div 
+          ref={dotsRef}
+          className="flex justify-center gap-2"
+        >
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="w-3 h-3 rounded-full bg-[#2E8B57]"
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function GestionNutriologos() {
@@ -59,14 +156,27 @@ export function GestionNutriologos() {
     }
   };
 
+  // Formato de teléfono: 653 333 3333
+  const formatPhone = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 10);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0,3)} ${digits.slice(3)}`;
+    return `${digits.slice(0,3)} ${digits.slice(3,6)} ${digits.slice(6)}`;
+  };
+
+  // Formato de moneda con comas: 1,200.00
+  const formatCurrency = (value: string) => {
+    const numeric = value.replace(/[^\d.]/g, '');
+    const [whole, decimal = ''] = numeric.split('.');
+    const formattedWhole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return decimal ? `${formattedWhole}.${decimal}` : formattedWhole;
+  };
+
   const handleInputChange = (field: string, value: string) => {
     if (field === 'numero_celular') {
-      const numericValue = value.replace(/\D/g, '');
-      setFormData(prev => ({ ...prev, [field]: numericValue }));
+      setFormData(prev => ({ ...prev, [field]: value.replace(/\D/g, '').slice(0, 10) }));
     } else if (field === 'tarifa_consulta') {
-      const numericValue = value.replace(/[^\d.]/g, '');
-      const parts = numericValue.split('.');
-      if (parts.length <= 2) setFormData(prev => ({ ...prev, [field]: numericValue }));
+      setFormData(prev => ({ ...prev, [field]: formatCurrency(value) }));
     } else {
       setFormData(prev => ({ ...prev, [field]: value }));
     }
@@ -96,15 +206,18 @@ export function GestionNutriologos() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const tarifa = parseFloat(formData.tarifa_consulta);
+    const rawTarifa = formData.tarifa_consulta.replace(/,/g, '');
+    const tarifa = parseFloat(rawTarifa);
     if (isNaN(tarifa) || tarifa <= 0) {
       toast.error('La tarifa debe ser un número mayor a 0');
       return;
     }
+
     if (formData.numero_celular.length !== 10) {
       toast.error('El número celular debe tener 10 dígitos');
       return;
     }
+
     if (!formData.correo.includes('@')) {
       toast.error('Correo inválido');
       return;
@@ -127,7 +240,7 @@ export function GestionNutriologos() {
 
     try {
       if (editingId) {
-        // ── Editar ──
+        // Editar
         const { error } = await supabase
           .from('nutriologos')
           .update(nutriologoData)
@@ -136,10 +249,9 @@ export function GestionNutriologos() {
         if (error) throw error;
         toast.success('Nutriólogo actualizado exitosamente');
       } else {
-        // ── Crear ──
+        // Crear
         const passwordToUse = formData.password.trim();
 
-        // Crear usuario en Auth
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: nutriologoData.correo,
           password: passwordToUse,
@@ -149,11 +261,9 @@ export function GestionNutriologos() {
         });
 
         if (authError) {
-          // Manejar email ya registrado
           if (authError.message.includes('already registered') || authError.message.includes('duplicate key')) {
             toast.error(
-              'Este correo ya está registrado en el sistema. ' +
-              'Usa uno diferente o elimina el usuario existente desde el dashboard de Supabase (Authentication → Users).'
+              'Este correo ya está registrado. Usa uno diferente o elimina el usuario existente en Supabase (Authentication → Users).'
             );
           } else {
             throw authError;
@@ -167,18 +277,12 @@ export function GestionNutriologos() {
 
         const userId = authData.user.id;
 
-        // Insertar perfil en nutriologos
         const { error: insertError } = await supabase
           .from('nutriologos')
           .insert({
             id_auth_user: userId,
-            nombre: nutriologoData.nombre,
-            apellido: nutriologoData.apellido,
-            correo: nutriologoData.correo,
-            numero_celular: nutriologoData.numero_celular || null,
-            tarifa_consulta: nutriologoData.tarifa_consulta,
-            activo: true,
-            cedula_profesional: '',           // Ajusta si es obligatorio
+            ...nutriologoData,
+            cedula_profesional: '',
             especialidad: '',
             consultorio: '',
             horario_atencion: '',
@@ -190,7 +294,6 @@ export function GestionNutriologos() {
           });
 
         if (insertError) {
-          // Rollback: eliminar usuario de Auth si falla el perfil
           await supabase.auth.admin.deleteUser(userId);
           throw insertError;
         }
@@ -198,7 +301,7 @@ export function GestionNutriologos() {
         toast.success(
           `Nutriólogo creado exitosamente.\n` +
           `Contraseña temporal: ${passwordToUse}\n` +
-          `(Compártela de forma segura con el nutriólogo para su primer inicio de sesión)`
+          `(Compártela de forma segura con el nutriólogo)`
         );
       }
 
@@ -219,8 +322,8 @@ export function GestionNutriologos() {
       apellido: nutriologo.apellido,
       correo: nutriologo.correo,
       numero_celular: nutriologo.numero_celular || '',
-      tarifa_consulta: nutriologo.tarifa_consulta.toString(),
-      password: '', // No editamos contraseña aquí
+      tarifa_consulta: nutriologo.tarifa_consulta.toLocaleString('es-MX'),
+      password: '',
     });
     setIsEditDialogOpen(true);
   };
@@ -264,6 +367,10 @@ export function GestionNutriologos() {
       toast.error(err.message || 'No se pudo eliminar');
     }
   };
+
+  if (loading) {
+    return <AnimatedLoadingScreen />;
+  }
 
   return (
     <div className="p-4 md:p-10 bg-[#F8FFF9] min-h-screen space-y-10 font-sans">
@@ -314,12 +421,25 @@ export function GestionNutriologos() {
                 <Input type="email" value={formData.correo} onChange={(e) => handleInputChange('correo', e.target.value)} className="rounded-xl border-2 border-[#F0FFF4] focus:border-[#D1E8D5] h-12 bg-[#F8FFF9] font-bold" required />
               </div>
               <div className="space-y-2">
-                <Label className="text-[10px] font-[900] uppercase text-[#1A3026] ml-1">Celular (10 dígitos)</Label>
-                <Input value={formData.numero_celular} onChange={(e) => handleInputChange('numero_celular', e.target.value)} maxLength={10} className="rounded-xl border-2 border-[#F0FFF4] h-12 bg-[#F8FFF9] font-bold" required />
+                <Label className="text-[10px] font-[900] uppercase text-[#1A3026] ml-1">Celular (653 333 3333)</Label>
+                <Input 
+                  value={formatPhone(formData.numero_celular)} 
+                  onChange={(e) => handleInputChange('numero_celular', e.target.value)} 
+                  maxLength={12} 
+                  placeholder="653 333 3333" 
+                  className="rounded-xl border-2 border-[#F0FFF4] focus:border-[#D1E8D5] h-12 bg-[#F8FFF9] font-bold" 
+                  required 
+                />
               </div>
               <div className="space-y-2">
                 <Label className="text-[10px] font-[900] uppercase text-[#1A3026] ml-1">Tarifa ($)</Label>
-                <Input value={formData.tarifa_consulta} onChange={(e) => handleInputChange('tarifa_consulta', e.target.value)} className="rounded-xl border-2 border-[#F0FFF4] h-12 bg-[#F8FFF9] font-bold" required />
+                <Input 
+                  value={formData.tarifa_consulta} 
+                  onChange={(e) => handleInputChange('tarifa_consulta', e.target.value)} 
+                  placeholder="Ej: 1,200.00" 
+                  className="rounded-xl border-2 border-[#F0FFF4] focus:border-[#D1E8D5] h-12 bg-[#F8FFF9] font-bold" 
+                  required 
+                />
               </div>
               <div className="space-y-2 md:col-span-2">
                 <div className="flex items-center justify-between">
@@ -360,19 +480,17 @@ export function GestionNutriologos() {
 
       {/* Tabla Principal */}
       <Card className="rounded-[2.5rem] border-2 border-[#D1E8D5] overflow-hidden bg-white shadow-sm">
-        <CardHeader className="bg-[#F8FFF9] border-b border-[#F0FFF4] p-8 flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-xs font-[900] text-[#1A3026] uppercase tracking-[2px]">Nutriólogos Registrados</CardTitle>
-            <p className="text-[10px] font-bold text-[#3CB371] uppercase mt-1 tracking-wider">Total: {nutriologos.length} Profesionales</p>
-          </div>
-          <UserCircle className="text-[#3CB371] opacity-20" size={40} />
+        <CardHeader className="bg-[#F8FFF9] border-b border-[#D1E8D5] p-8">
+          <CardTitle className="text-sm font-[900] text-[#1A3026] uppercase tracking-[2px] flex items-center gap-2">
+            <UserCircle className="text-[#2E8B57]" size={18} /> Nutriólogos Registrados
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
             <div className="p-12 text-center text-gray-500">Cargando nutriólogos...</div>
           ) : (
             <Table>
-              <TableHeader className="bg-white">
+              <TableHeader>
                 <TableRow className="border-b border-[#F0FFF4] hover:bg-transparent">
                   <TableHead className="py-6 px-8 text-[10px] font-[900] uppercase text-gray-400 tracking-widest">Profesional</TableHead>
                   <TableHead className="text-[10px] font-[900] uppercase text-gray-400 tracking-widest">Contacto</TableHead>
@@ -402,13 +520,13 @@ export function GestionNutriologos() {
                           <Mail size={12} className="text-[#3CB371]" /> {nutriologo.correo}
                         </div>
                         <div className="flex items-center gap-2 text-gray-500 font-bold text-[10px] uppercase">
-                          <Phone size={12} className="text-[#3CB371]" /> {nutriologo.numero_celular || 'No registrado'}
+                          <Phone size={12} className="text-[#3CB371]" /> {formatPhone(nutriologo.numero_celular || 'No registrado')}
                         </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
                       <span className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-50 border border-emerald-100 rounded-xl text-[#2E8B57] font-[900] text-[12px]">
-                        <BadgeDollarSign size={14} /> ${nutriologo.tarifa_consulta.toFixed(2)}
+                        <BadgeDollarSign size={14} /> ${nutriologo.tarifa_consulta.toLocaleString('es-MX')}
                       </span>
                     </TableCell>
                     <TableCell className="text-right py-6 px-8">
@@ -442,11 +560,24 @@ export function GestionNutriologos() {
                               </div>
                               <div className="space-y-2">
                                 <Label className="text-[10px] font-[900] uppercase text-[#1A3026] ml-1">Celular</Label>
-                                <Input value={formData.numero_celular} onChange={(e) => handleInputChange('numero_celular', e.target.value)} maxLength={10} className="rounded-xl border-2 border-[#F0FFF4] h-12 bg-[#F8FFF9] font-bold" />
+                                <Input 
+                                  value={formatPhone(formData.numero_celular)} 
+                                  onChange={(e) => handleInputChange('numero_celular', e.target.value)} 
+                                  maxLength={12} 
+                                  placeholder="653 333 3333" 
+                                  className="rounded-xl border-2 border-[#F0FFF4] focus:border-[#D1E8D5] h-12 bg-[#F8FFF9] font-bold" 
+                                  required 
+                                />
                               </div>
                               <div className="space-y-2">
                                 <Label className="text-[10px] font-[900] uppercase text-[#1A3026] ml-1">Tarifa ($)</Label>
-                                <Input value={formData.tarifa_consulta} onChange={(e) => handleInputChange('tarifa_consulta', e.target.value)} className="rounded-xl border-2 border-[#F0FFF4] h-12 bg-[#F8FFF9] font-bold" />
+                                <Input 
+                                  value={formData.tarifa_consulta} 
+                                  onChange={(e) => handleInputChange('tarifa_consulta', e.target.value)} 
+                                  placeholder="Ej: 1,200.00" 
+                                  className="rounded-xl border-2 border-[#F0FFF4] focus:border-[#D1E8D5] h-12 bg-[#F8FFF9] font-bold" 
+                                  required 
+                                />
                               </div>
 
                               {/* Botón de reset contraseña en edición */}

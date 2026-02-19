@@ -1,9 +1,106 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { Users, Calendar, TrendingUp, DollarSign, Activity, ArrowUpRight } from 'lucide-react';
+import { Users, Calendar, TrendingUp, DollarSign, Activity, ArrowUpRight, LayoutDashboard } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Cell } from 'recharts';
 import { supabase } from '@/app/context/supabaseClient';
 import { toast } from 'sonner';
+
+// Componente de carga animado
+function AnimatedLoadingScreen() {
+  const iconRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+  const dotsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Animación del icono (dashboard)
+    const iconElement = iconRef.current;
+    const textElement = textRef.current;
+    const dotsElement = dotsRef.current;
+
+    if (iconElement) {
+      iconElement.animate(
+        [
+          { transform: 'rotate(0deg) scale(1)', opacity: 0.8 },
+          { transform: 'rotate(360deg) scale(1.2)', opacity: 1 },
+          { transform: 'rotate(720deg) scale(1)', opacity: 0.8 }
+        ],
+        {
+          duration: 3000,
+          iterations: Infinity,
+          easing: 'cubic-bezier(0.4, 0.0, 0.2, 1)'
+        }
+      );
+    }
+
+    if (textElement) {
+      textElement.animate(
+        [
+          { opacity: 0.5 },
+          { opacity: 1 },
+          { opacity: 0.5 }
+        ],
+        {
+          duration: 2000,
+          iterations: Infinity,
+          easing: 'ease-in-out'
+        }
+      );
+    }
+
+    if (dotsElement) {
+      const dots = dotsElement.children;
+      Array.from(dots).forEach((dot, index) => {
+        (dot as HTMLElement).animate(
+          [
+            { transform: 'scale(0.8)', opacity: 0.5 },
+            { transform: 'scale(1.2)', opacity: 1 },
+            { transform: 'scale(0.8)', opacity: 0.5 }
+          ],
+          {
+            duration: 1500,
+            delay: index * 200,
+            iterations: Infinity,
+            easing: 'ease-in-out'
+          }
+        );
+      });
+    }
+  }, []);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#F0FFF4]">
+      <div className="text-center">
+        <div className="flex justify-center mb-8">
+          <div 
+            ref={iconRef}
+            className="text-[#2E8B57]"
+          >
+            <LayoutDashboard size={80} strokeWidth={1.5} />
+          </div>
+        </div>
+        
+        <div 
+          ref={textRef}
+          className="text-[#2E8B57] font-bold text-2xl mb-6"
+        >
+          Cargando dashboard administrativo...
+        </div>
+        
+        <div 
+          ref={dotsRef}
+          className="flex justify-center gap-2"
+        >
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="w-3 h-3 rounded-full bg-[#2E8B57]"
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function DashboardAdmin() {
   const [loading, setLoading] = useState(true);
@@ -119,13 +216,7 @@ export function DashboardAdmin() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen p-10 flex items-center justify-center">
-        <div className="text-[#2E8B57] font-bold text-xl animate-pulse">
-          Cargando dashboard administrativo...
-        </div>
-      </div>
-    );
+    return <AnimatedLoadingScreen />;
   }
 
   return (
@@ -265,5 +356,5 @@ function StatCard({ title, value, sub, icon, color }) {
         </div>
       </CardContent>
     </Card>
-  );
+  ); 
 }

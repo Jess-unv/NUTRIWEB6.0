@@ -15,7 +15,6 @@ function AnimatedLoadingScreen() {
   const dotsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Animación del icono (pagos)
     const iconElement = iconRef.current;
     const textElement = textRef.current;
     const dotsElement = dotsRef.current;
@@ -120,64 +119,49 @@ export function GestionPagos() {
       return;
     }
 
-    console.log('[GestionPagos] Nutriólogo ID (integer):', user.nutriologoId);
-    console.log('[GestionPagos] Auth UUID:', user.id);
-
     const fetchPagos = async () => {
       setLoading(true);
       try {
         const nutriologoId = Number(user.nutriologoId);
 
-        // Consulta corregida: sin alias en 'estado', join correcto a pagos y pacientes
+        // Llamada a la función almacenada
         const { data: citasData, error: errCitas } = await supabase
-          .from('citas')
-          .select(`
-            id_cita,
-            fecha_hora,
-            estado,
-            pacientes!inner (nombre, apellido, correo),
-            pagos!left (monto, estado)
-          `)
-          .eq('id_nutriologo', nutriologoId) // integer correcto
-          .order('fecha_hora', { ascending: false });
+          .rpc('get_pagados_nutriologo', { p_nutriologo_id: nutriologoId });
 
         if (errCitas) throw errCitas;
 
-        // Formatear y calcular
-        const citasFormateadas = citasData?.map(c => {
-          const montoTotal = c.pagos?.reduce((sum, p) => sum + Number(p.monto || 0), 0) || 0;
-          const pagada = c.pagos?.some(p => p.estado === 'completado') || false;
+        console.log('[GestionPagos] Datos recibidos:', citasData);
 
-          return {
-            id: c.id_cita,
-            fecha: new Date(c.fecha_hora).toLocaleDateString('es-MX'),
-            hora: new Date(c.fecha_hora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
-            estado: c.estado,
-            paciente: {
-              nombre: c.pacientes?.nombre || 'Sin nombre',
-              apellido: c.pacientes?.apellido || '',
-              email: c.pacientes?.correo || 'Sin email'
-            },
-            pagada,
-            monto: montoTotal
-          };
-        }) || [];
+        const citasFormateadas = citasData?.map(c => ({
+          id: c.id_cita,
+          fecha_hora: new Date(c.fecha_hora), // ← clave: guardamos fecha_hora completa
+          fecha: new Date(c.fecha_hora).toLocaleDateString('es-MX'),
+          hora: new Date(c.fecha_hora).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+          estado: c.estado,
+          paciente: {
+            nombre: c.paciente_nombre || 'Sin nombre',
+            apellido: c.paciente_apellido || '',
+            email: c.paciente_correo || 'Sin email'
+          },
+          pagada: c.pago_estado === 'completado',
+          monto: Number(c.pago_monto || 0)
+        })) || [];
 
         setCitas(citasFormateadas);
 
-        // Cálculos reales
         const ingresos = citasFormateadas.reduce((acc, c) => acc + (c.pagada ? c.monto : 0), 0);
         const pendientes = citasFormateadas.reduce((acc, c) => acc + (!c.pagada ? c.monto : 0), 0);
 
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const citasMes = citasFormateadas.filter(c => new Date(c.fecha_hora) >= monthStart).length;
+        const citasMes = citasFormateadas.filter(c => c.fecha_hora >= monthStart).length;
 
         setIngresosTotales(ingresos);
         setPendientesCobro(pendientes);
         setCitasEsteMes(citasMes);
+
       } catch (err: any) {
-        console.error('Error cargando pagos:', err);
+        console.error('Error cargando pagos:', err.message);
         toast.error('No se pudieron cargar los pagos');
       } finally {
         setLoading(false);
@@ -223,7 +207,7 @@ export function GestionPagos() {
               </div>
               <div>
                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Ingresos Totales</p>
-                <p className="text-3xl font-[900] text-[#1A3026]">${ingresosTotales.toLocaleString()}</p>
+                <p className="text-3xl font-[900] text-[#1A3026]">${ingresosTotales.toLocaleString('es-MX')}</p>
               </div>
             </CardContent>
           </Card>
@@ -235,7 +219,7 @@ export function GestionPagos() {
               </div>
               <div>
                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Pendiente de Cobro</p>
-                <p className="text-3xl font-[900] text-[#1A3026]">${pendientesCobro.toLocaleString()}</p>
+                <p className="text-3xl font-[900] text-[#1A3026]">${pendientesCobro.toLocaleString('es-MX')}</p>
               </div>
             </CardContent>
           </Card>
@@ -267,7 +251,7 @@ export function GestionPagos() {
               <TableHeader>
                 <TableRow className="border-none hover:bg-transparent px-4">
                   <TableHead className="pl-8 text-[10px] font-black uppercase text-gray-400 tracking-wider">Paciente</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Fecha de Cita</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Fecha y Hora</TableHead>
                   <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Monto</TableHead>
                   <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Estado</TableHead>
                   <TableHead className="text-right pr-8 text-[10px] font-black uppercase text-gray-400 tracking-wider">Acciones</TableHead>
@@ -282,16 +266,14 @@ export function GestionPagos() {
                       </p>
                       <p className="text-[10px] font-bold text-gray-400">{cita.paciente.email}</p>
                     </TableCell>
-                    <TableCell className="font-bold text-gray-600 text-xs uppercase">{cita.fecha}</TableCell>
-                    <TableCell className="font-[900] text-[#1A3026] text-sm">${cita.monto.toLocaleString()}</TableCell>
+                    <TableCell className="font-bold text-gray-600 text-xs uppercase">{cita.fecha} • {cita.hora}</TableCell>
+                    <TableCell className="font-[900] text-[#1A3026] text-sm">${cita.monto.toLocaleString('es-MX')}</TableCell>
                     <TableCell>
                       <Badge className={`
-                        ${cita.pagada 
-                          ? 'bg-[#F0FFF4] text-[#2E8B57] border-[#D1E8D5]' 
-                          : 'bg-orange-50 text-orange-600 border-orange-100'} 
+                        ${cita.pagada ? 'bg-[#F0FFF4] text-[#2E8B57] border-[#D1E8D5]' : 'bg-orange-50 text-orange-600 border-orange-100'} 
                         border-2 px-3 py-1 rounded-xl font-black text-[9px] uppercase shadow-none
                       `}>
-                        {cita.pagada ? 'Completado' : 'Pendiente'}
+                        {cita.pagada ? 'Pagado' : 'Pendiente'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right pr-8">

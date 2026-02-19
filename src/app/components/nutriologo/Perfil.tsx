@@ -41,7 +41,7 @@ export function Perfil() {
     fotoPerfil: user?.fotoPerfil || null
   });
 
-  // Bloqueo de navegación (tu código original intacto)
+  // Bloqueo de navegación si hay cambios sin guardar
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (isEditing && hasChanges) {
@@ -119,13 +119,8 @@ export function Perfil() {
       return;
     }
 
-    if (formData.tarifa <= 0) {
-      toast.error("La tarifa debe ser un número mayor a 0");
-      return;
-    }
-
-    if (formData.tarifa < 1000) {
-      toast.error("La tarifa mínima es de $1,000");
+    if (formData.tarifa < 0) {
+      toast.error("La tarifa no puede ser negativa");
       return;
     }
 
@@ -158,6 +153,11 @@ export function Perfil() {
     });
     setPreviewImage(user?.fotoPerfil || null);
     setIsEditing(false);
+  };
+
+  // Función para formatear número con comas (ej: 1200 → "1,200")
+  const formatNumberWithCommas = (num: number) => {
+    return num.toLocaleString('es-MX');
   };
 
   return (
@@ -270,21 +270,15 @@ export function Perfil() {
                       <input
                         disabled={!isEditing}
                         type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        value={formData.tarifa === 0 && !isEditing ? '' : formData.tarifa}
+                        value={formData.tarifa.toLocaleString('es-MX')}
                         onChange={(e) => {
-                          const value = e.target.value.replace(/[^0-9]/g, ''); // solo números
-                          const numValue = value === '' ? 0 : Number(value);
+                          const cleanValue = e.target.value.replace(/[^0-9]/g, '');
+                          const numValue = cleanValue === '' ? 0 : Number(cleanValue);
                           setFormData({...formData, tarifa: numValue});
                         }}
-                        placeholder="Ej: 1500"
-                        className={`w-full mt-2 pl-12 pr-4 py-4 bg-white border-2 border-[#D1E8D5] rounded-2xl focus:border-[#2E8B57] outline-none disabled:opacity-50 font-medium
-                          ${formData.tarifa < 1000 && isEditing ? 'border-red-400 focus:border-red-500' : ''}`}
+                        placeholder="Ej: 1,500"
+                        className="w-full mt-2 pl-12 pr-4 py-4 bg-white border-2 border-[#D1E8D5] rounded-2xl focus:border-[#2E8B57] outline-none disabled:opacity-50 font-medium"
                       />
-                      {formData.tarifa < 1000 && isEditing && (
-                        <p className="text-[9px] text-red-500 mt-1">Mínimo $1,000</p>
-                      )}
                     </div>
                   </div>
                 </div>
